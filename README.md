@@ -33,6 +33,7 @@ Frontend (`src/App.jsx`, tampilan, semua fitur) **sama persis** dengan versi Net
 │   └── data/indicators.json   # Data 59 indikator (boleh disunting bila rubrik berubah)
 ├── api/
 │   ├── schools.js             # API data sekolah (GET/PUT/DELETE, pakai Upstash Redis)
+│   ├── contoh.js              # API contoh dokumen (tautan Google Drive, dikelola koordinator)
 │   ├── pengawas.js            # API akun pengawas (login, tambah/ubah/hapus oleh koordinator)
 │   ├── evidence.js            # API bukti dukung per sekolah (GET/PUT/DELETE)
 │   └── _lib.js                # Pustaka bersama: koneksi Redis & pemeriksaan hak akses
@@ -126,6 +127,18 @@ cukup Anda dan pihak yang Anda percaya yang tahu.
   menu **Kelola Pengawas**: membuat akun pengawas (nama, NIP opsional, kode akses), mengubah
   atau menghapus akun, serta menetapkan sekolah binaan tiap pengawas. Menghapus akun pengawas
   tidak menghapus sekolahnya; sekolah itu berstatus "belum ditetapkan".
+
+### Contoh Dokumen (tautan Google Drive)
+
+Koordinator membuka menu **Contoh Dokumen** untuk menambahkan tautan Google Drive berisi contoh
+dokumen atau file data dukung. Tiap tautan punya judul, keterangan opsional, dan cakupan:
+**umum** (semua bagian, atau satu bagian) atau **satu indikator tertentu**. Tautan umum tampil
+pada panel **Contoh dokumen panduan** di bagian atas daftar indikator; tautan indikator tampil
+di bawah judul indikator yang bersangkutan. Guru, kepala sekolah, dan pengawas cukup mengklik
+untuk membukanya di tab baru. Hanya koordinator yang dapat menambah, mengubah, dan menghapus.
+Tautan wajib diawali `https://`. Agar bisa dibuka tanpa meminta izin, atur berbagi di Drive
+menjadi "Siapa saja yang memiliki link" dengan akses Pelihat. Menghapus tautan tidak menghapus
+berkas di Drive.
 
 ### Dashboard Binaan dan Prioritas Pendampingan
 

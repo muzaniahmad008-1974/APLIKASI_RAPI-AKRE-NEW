@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   LayoutDashboard, Building2, BarChart3, ShieldCheck, ShieldAlert, ChevronDown, ChevronRight,
   Search, Save, Check, X, AlertCircle, FolderOpen, Info, Lock, Unlock, Filter,
-  ClipboardList, Printer, RotateCcw, ArrowLeft, GraduationCap, UserCog, Users2, Plus, Trash2, Download, FileText, LogOut, Target, AlertTriangle
+  ClipboardList, Printer, RotateCcw, ArrowLeft, GraduationCap, UserCog, Users2, Plus, Trash2, Download, FileText, LogOut, Target, AlertTriangle, ExternalLink, BookOpen
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import INDICATOR_DATA from './data/indicators.json';
@@ -615,6 +615,62 @@ async function apiResetEvidence(schoolId, auth) {
   return jsonOrThrow(res, 'Gagal mereset data');
 }
 
+async function apiGetContoh() {
+  try {
+    const res = await fetch('/api/contoh');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (e) { return []; }
+}
+async function apiAddContoh(newContoh, auth) {
+  const res = await fetch('/api/contoh', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newContoh, ...authBody(auth) }),
+  });
+  return jsonOrThrow(res, 'Gagal menambah contoh dokumen');
+}
+async function apiUpdateContoh(id, patch, auth) {
+  const res = await fetch('/api/contoh', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, patch, ...authBody(auth) }),
+  });
+  return jsonOrThrow(res, 'Gagal menyimpan contoh dokumen');
+}
+async function apiDeleteContoh(id, auth) {
+  const res = await fetch('/api/contoh?id=' + encodeURIComponent(id), {
+    method: 'DELETE', headers: authHeaders(auth),
+    body: JSON.stringify({ id, ...authBody(auth) }),
+  });
+  return jsonOrThrow(res, 'Gagal menghapus contoh dokumen');
+}
+
+/* =========================================================================
+   CONTOH DOKUMEN (tautan Google Drive yang dikelola koordinator)
+   kode kosong = contoh umum untuk bagian; kode terisi = contoh satu indikator
+   ========================================================================= */
+const ContohContext = React.createContext([]);
+const contohUntukItem = (list, code) => list.filter(c => c.kode && c.kode === code);
+const contohUmum = (list, tab) => list.filter(c => !c.kode && (c.bagian === 'semua' || c.bagian === tab));
+const contohTarget = (c) => {
+  if (c.kode) return `Indikator ${c.kode}`;
+  return c.bagian === 'semua' ? 'Umum (semua bagian)' : `Umum, ${BAGIAN_META[c.bagian]?.label || c.bagian}`;
+};
+const isDriveUrl = (u) => { try { const h = new URL(u).hostname; return h === 'drive.google.com' || h === 'docs.google.com'; } catch (e) { return false; } };
+
+function ContohLink({ c }) {
+  return (
+    <a
+      href={c.url} target="_blank" rel="noopener noreferrer" title={c.keterangan || c.judul}
+      className="inline-flex items-center gap-1.5 max-w-full rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-sm font-semibold text-sky-900 hover:bg-sky-100"
+    >
+      <FileText size={13} className="shrink-0" />
+      <span className="truncate">{c.judul}</span>
+      <ExternalLink size={12} className="shrink-0 opacity-70" />
+    </a>
+  );
+}
+
 /* =========================================================================
    KOMPONEN KECIL
    ========================================================================= */
@@ -888,6 +944,7 @@ function BuktiDropdown({ options, selected, onChange }) {
    ========================================================================= */
 function IndicatorCard({ item, data, onChange }) {
   const [showInfo, setShowInfo] = useState(false);
+  const contohItem = contohUntukItem(React.useContext(ContohContext), item.code);
   const skor = data?.skor || 0;
   const filled = skor > 0;
   const opsiBukti = getEvidenceOptions(item);
@@ -911,6 +968,14 @@ function IndicatorCard({ item, data, onChange }) {
           >
             <Info size={13} /> {showInfo ? 'Sembunyikan panduan' : 'Lihat panduan skor & sumber bukti'}
           </button>
+          {contohItem.length > 0 && (
+            <div className="mt-2" data-testid="contoh-indikator">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-1 flex items-center gap-1"><BookOpen size={12} /> Contoh dokumen</p>
+              <div className="flex flex-wrap gap-1.5">
+                {contohItem.map(c => <ContohLink key={c.id} c={c} />)}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1075,6 +1140,25 @@ function ButirAccordion({ butir, evidence, onChangeItem, defaultOpen, filterMode
 /* =========================================================================
    TAMPILAN: DETAIL SEKOLAH (input bukti dukung)
    ========================================================================= */
+function ContohUmumPanel({ tab }) {
+  const list = contohUmum(React.useContext(ContohContext), tab);
+  if (list.length === 0) return null;
+  return (
+    <details className="mb-3 rounded-xl border border-sky-200 bg-sky-50/70 p-3" data-testid="contoh-umum">
+      <summary className="cursor-pointer text-base font-bold text-sky-900 flex items-center gap-1.5 inline-flex"><BookOpen size={15} /> Contoh dokumen panduan ({list.length})</summary>
+      <p className="text-sm text-slate-700 mt-1.5 mb-2">Klik untuk membuka contoh di Google Drive sebagai acuan menyiapkan bukti dukung.</p>
+      <div className="space-y-1.5">
+        {list.map(c => (
+          <div key={c.id} className="flex items-start gap-2 flex-wrap">
+            <ContohLink c={c} />
+            {c.keterangan && <span className="text-sm text-slate-700 flex-1 min-w-[10rem]">{c.keterangan}</span>}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function SchoolDetailView({ school, evidence, onChangeItem, saveStatus, isAdmin, onUpdateSchoolMeta, onBack, onResetRequest, onDeleteSchoolRequest, allowedTabs, lockedRole }) {
   const tabs = allowedTabs && allowedTabs.length ? allowedTabs : ['kp', 'kk', 'il'];
   const [tab, setTab] = useState(tabs[0]);
@@ -1159,6 +1243,8 @@ function SchoolDetailView({ school, evidence, onChangeItem, saveStatus, isAdmin,
           );
         })}
       </div>
+
+      <ContohUmumPanel tab={tab} />
 
       <p className="text-sm text-slate-900 font-semibold mb-3">Penanggung jawab: <span className="font-bold text-slate-900">{bagianMeta.peran}</span></p>
 
@@ -1714,6 +1800,140 @@ function RekapView({ schools, evidenceMap }) {
 }
 
 /* =========================================================================
+   TAMPILAN: KELOLA CONTOH DOKUMEN (khusus koordinator)
+   ========================================================================= */
+function ContohTargetSelect({ value, onChange, label }) {
+  return (
+    <select aria-label={label} value={value} onChange={e => onChange(e.target.value)} className="mt-0.5 w-full text-base rounded-lg border border-slate-400 px-2 py-1.5 bg-white focus:outline-none">
+      <option value="umum:semua">Umum, semua bagian</option>
+      {['kp', 'kk', 'il'].map(k => <option key={k} value={`umum:${k}`}>Umum, {BAGIAN_META[k].fullLabel}</option>)}
+      {['kp', 'kk', 'il'].map(k => (
+        <optgroup key={k} label={BAGIAN_META[k].fullLabel}>
+          {ALL_ITEMS.filter(it => it.bagian === k).map(it => <option key={it.code} value={`kode:${it.code}`}>{it.code} {it.name.length > 70 ? it.name.slice(0, 70) + '...' : it.name}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+const contohToTarget = (c) => c.kode ? `kode:${c.kode}` : `umum:${c.bagian}`;
+const targetToFields = (t) => {
+  if (t.startsWith('kode:')) {
+    const kode = t.slice(5);
+    const it = ALL_ITEMS.find(x => x.code === kode);
+    return { kode, bagian: it ? it.bagian : 'semua' };
+  }
+  return { kode: '', bagian: t.slice(5) };
+};
+
+function ContohRow({ c, onUpdate, onDeleteRequest }) {
+  const [judul, setJudul] = useState(c.judul);
+  const [url, setUrl] = useState(c.url);
+  const [ket, setKet] = useState(c.keterangan || '');
+  const [err, setErr] = useState('');
+  useEffect(() => { setJudul(c.judul); setUrl(c.url); setKet(c.keterangan || ''); }, [c.id, c.judul, c.url, c.keterangan]);
+  const save = async (patch, revert) => {
+    setErr('');
+    const msg = await onUpdate(c.id, patch);
+    if (msg) { setErr(msg); revert && revert(); }
+  };
+  const inp = 'mt-0.5 w-full text-base rounded-lg border border-slate-400 px-2 py-1.5 focus:outline-none';
+  return (
+    <div className="rounded-xl border border-slate-400 bg-white p-3" data-testid="contoh-row">
+      <div className="grid sm:grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs font-bold text-slate-700 uppercase">Judul</label>
+          <input aria-label={`Judul ${c.judul}`} value={judul} onChange={e => setJudul(e.target.value)} onBlur={() => judul !== c.judul && save({ judul }, () => setJudul(c.judul))} className={inp} />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-700 uppercase">Berlaku untuk</label>
+          <ContohTargetSelect label={`Berlaku ${c.judul}`} value={contohToTarget(c)} onChange={t => save(targetToFields(t))} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-xs font-bold text-slate-700 uppercase">Tautan Google Drive</label>
+          <input aria-label={`Tautan ${c.judul}`} value={url} onChange={e => setUrl(e.target.value)} onBlur={() => url !== c.url && save({ url }, () => setUrl(c.url))} className={inp + ' font-mono text-sm'} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-xs font-bold text-slate-700 uppercase">Keterangan (opsional)</label>
+          <input aria-label={`Keterangan ${c.judul}`} value={ket} onChange={e => setKet(e.target.value)} onBlur={() => ket !== (c.keterangan || '') && save({ keterangan: ket }, () => setKet(c.keterangan || ''))} className={inp} />
+        </div>
+      </div>
+      <div className="flex items-center justify-between mt-2 gap-2 flex-wrap">
+        <a href={c.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-bold text-[#1F3864] hover:underline"><ExternalLink size={13} /> Uji tautan</a>
+        <button onClick={() => onDeleteRequest(c)} className="flex items-center gap-1.5 text-sm font-bold text-rose-600 hover:text-rose-700"><Trash2 size={13} /> Hapus</button>
+      </div>
+      {!isDriveUrl(c.url) && <p className="text-sm text-amber-700 font-semibold mt-1 flex items-center gap-1"><AlertCircle size={12} /> Bukan tautan Google Drive atau Docs. Pastikan tautan dapat dibuka guru dan kepala sekolah.</p>}
+      {err && <p className="text-sm text-rose-600 font-semibold mt-1 flex items-center gap-1"><AlertCircle size={12} /> {err}</p>}
+    </div>
+  );
+}
+
+function KelolaContohView({ contohList, onAdd, onUpdate, onDeleteRequest }) {
+  const [judul, setJudul] = useState('');
+  const [url, setUrl] = useState('');
+  const [target, setTarget] = useState('umum:semua');
+  const [ket, setKet] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState('all');
+  const submit = async () => {
+    setBusy(true); setErr('');
+    const msg = await onAdd({ judul, url, keterangan: ket, ...targetToFields(target) });
+    setBusy(false);
+    if (msg) setErr(msg); else { setJudul(''); setUrl(''); setKet(''); }
+  };
+  const shown = contohList.filter(c => filter === 'all' || (filter === 'indikator' ? !!c.kode : !c.kode));
+  const inp = 'mt-1 w-full text-base rounded-lg border border-slate-400 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30';
+  return (
+    <div className="max-w-4xl mx-auto pb-24 md:pb-8">
+      <div className="mb-5">
+        <h2 className="font-serif font-bold text-3xl text-[#1C2530]">Contoh Dokumen</h2>
+        <p className="text-base text-slate-900 font-semibold mt-0.5">Tambahkan tautan Google Drive berisi contoh dokumen atau file data dukung. Guru dan kepala sekolah dapat membukanya dari halaman indikator.</p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-400 bg-white/70 p-4 mb-5">
+        <h3 className="font-bold text-base text-[#1C2530] mb-2">Tambah Contoh Dokumen</h3>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase">Judul *</label>
+            <input value={judul} onChange={e => setJudul(e.target.value)} placeholder="mis. Contoh SK Tim TPPK" className={inp} />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase">Berlaku untuk</label>
+            <ContohTargetSelect label="Berlaku untuk baru" value={target} onChange={setTarget} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-xs font-bold text-slate-700 uppercase">Tautan Google Drive *</label>
+            <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://drive.google.com/..." className={inp + ' font-mono text-sm'} />
+            <p className="text-xs text-slate-600 mt-1">Atur berbagi di Drive menjadi "Siapa saja yang memiliki link" dengan akses Pelihat, agar bisa dibuka tanpa meminta izin.</p>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-xs font-bold text-slate-700 uppercase">Keterangan (opsional)</label>
+            <input value={ket} onChange={e => setKet(e.target.value)} placeholder="mis. Format SK, sesuaikan nama sekolah" className={inp} />
+          </div>
+        </div>
+        {err && <p className="text-sm text-rose-600 font-semibold mt-2 flex items-center gap-1"><AlertCircle size={12} /> {err}</p>}
+        <button onClick={submit} disabled={busy} className="mt-3 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold text-white bg-[#0F6B5C] hover:bg-[#0b5347] disabled:opacity-50">
+          <Plus size={15} /> {busy ? 'Menyimpan...' : 'Tambah Contoh'}
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <h3 className="font-bold text-base text-slate-900">Daftar Contoh ({contohList.length})</h3>
+        <select aria-label="Filter contoh" value={filter} onChange={e => setFilter(e.target.value)} className="text-sm font-semibold rounded-lg border border-slate-400 px-2 py-1.5 bg-white text-slate-800">
+          <option value="all">Semua</option>
+          <option value="umum">Umum per bagian</option>
+          <option value="indikator">Per indikator</option>
+        </select>
+      </div>
+      <div className="space-y-2.5">
+        {shown.length === 0 && <p className="rounded-xl bg-white p-4 text-base text-slate-700 font-semibold">Belum ada contoh dokumen.</p>}
+        {shown.map(c => <ContohRow key={c.id} c={c} onUpdate={onUpdate} onDeleteRequest={onDeleteRequest} />)}
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
    NAVIGASI
    ========================================================================= */
 function NavItem({ icon: Icon, label, active, onClick }) {
@@ -1748,6 +1968,10 @@ export default function AkreditasiApp() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [session, setSession] = useState(null); // null | {type:'koordinator',code} | {type:'pengawas',id,name,code}
   const [pengawasList, setPengawasList] = useState([]);
+  const [contohList, setContohList] = useState([]);
+  const [deleteContohTarget, setDeleteContohTarget] = useState(null);
+  const [deleteContohChecking, setDeleteContohChecking] = useState(false);
+  const [deleteContohError, setDeleteContohError] = useState('');
   const [filterPengawas, setFilterPengawas] = useState('all'); // khusus koordinator: 'all' | '__none__' | id pengawas
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [resetError, setResetError] = useState('');
@@ -1774,9 +1998,10 @@ export default function AkreditasiApp() {
   useEffect(() => {
     (async () => {
       try {
-        const [finalSchools, pList] = await Promise.all([apiGetSchools(), apiGetPengawas()]);
+        const [finalSchools, pList, cList] = await Promise.all([apiGetSchools(), apiGetPengawas(), apiGetContoh()]);
         setSchools(finalSchools);
         setPengawasList(pList);
+        setContohList(cList);
         const evPairs = await Promise.all(finalSchools.map(async s => {
           const ev = await apiGetEvidence(s.id);
           return [s.id, ev || emptyEvidence()];
@@ -1919,6 +2144,22 @@ export default function AkreditasiApp() {
     }
     setDeletePengawasChecking(false);
   };
+  // ----- kelola contoh dokumen (koordinator) -----
+  const handleAddContoh = async (data) => {
+    try { const r = await apiAddContoh(data, session); setContohList(r.list); return null; } catch (e) { return e.message; }
+  };
+  const handleUpdateContoh = async (id, patch) => {
+    try { const r = await apiUpdateContoh(id, patch, session); setContohList(r.list); return null; } catch (e) { return e.message; }
+  };
+  const handleDeleteContohConfirm = async () => {
+    if (!deleteContohTarget) return;
+    setDeleteContohChecking(true); setDeleteContohError('');
+    try {
+      const r = await apiDeleteContoh(deleteContohTarget.id, session);
+      setContohList(r.list); setDeleteContohTarget(null);
+    } catch (e) { setDeleteContohError(e.message); }
+    setDeleteContohChecking(false);
+  };
   const handleAssignSchool = (schoolId, pengawasId) => handleUpdateSchoolMeta(schoolId, { pengawasId });
 
   const generateSchoolCode = () => String(Math.floor(1000 + Math.random() * 9000));
@@ -2016,6 +2257,7 @@ export default function AkreditasiApp() {
   const allowedTabs = ROLE_TABS[myRole];
 
   return (
+    <ContohContext.Provider value={contohList}>
     <div className="min-h-screen bg-[#6FA8DC]">
       {loadError && (
         <div className="bg-rose-50 border-b border-rose-200 text-rose-600 text-sm text-center py-2 px-4">
@@ -2086,6 +2328,7 @@ export default function AkreditasiApp() {
               <NavItem icon={Building2} label="Pilih Sekolah" active={view === 'sekolah'} onClick={() => { if (!selectedSchoolId) setSelectedSchoolId(scopedSchools[0]?.id); setView('sekolah'); }} />
               <NavItem icon={BarChart3} label="Rekap Antarsekolah" active={view === 'rekap'} onClick={() => setView('rekap')} />
               {isKoordinator && <NavItem icon={UserCog} label="Kelola Pengawas" active={view === 'kelola'} onClick={() => setView('kelola')} />}
+              {isKoordinator && <NavItem icon={BookOpen} label="Contoh Dokumen" active={view === 'contoh'} onClick={() => setView('contoh')} />}
               {isAdmin && (
                 <div className="mt-4 rounded-xl bg-[#0F6B5C]/10 p-3 text-sm text-[#0F6B5C] flex items-start gap-1.5">
                   <ShieldCheck size={14} className="shrink-0 mt-0.5" />
@@ -2114,6 +2357,13 @@ export default function AkreditasiApp() {
           )}
           {!isLocked && view === 'beranda' && <BerandaView schools={scopedSchools} evidenceMap={evidenceMap} onSelectSchool={handleSelectSchool} isAdmin={isAdmin} onOpenAddSchool={handleOpenAddSchool} onOpenPrioritas={() => setView('prioritas')} pengawasMode={pengawasMode} pengawasName={session?.name} scopeLabel={scopeLabel} />}
           {!isLocked && view === 'prioritas' && <PrioritasView schools={scopedSchools} evidenceMap={evidenceMap} onSelectSchool={handleSelectSchool} scopeLabel={scopeLabel} />}
+          {!isLocked && isKoordinator && view === 'contoh' && (
+            <KelolaContohView
+              contohList={contohList}
+              onAdd={handleAddContoh} onUpdate={handleUpdateContoh}
+              onDeleteRequest={(c) => { setDeleteContohError(''); setDeleteContohTarget(c); }}
+            />
+          )}
           {!isLocked && isKoordinator && view === 'kelola' && (
             <KelolaPengawasView
               pengawasList={pengawasList} schools={schools}
@@ -2161,6 +2411,7 @@ export default function AkreditasiApp() {
           <BottomNavItem icon={Building2} label="Sekolah" active={view === 'sekolah'} onClick={() => { if (!selectedSchoolId) setSelectedSchoolId(scopedSchools[0]?.id); setView('sekolah'); }} />
           <BottomNavItem icon={BarChart3} label="Rekap" active={view === 'rekap'} onClick={() => setView('rekap')} />
           {isKoordinator && <BottomNavItem icon={UserCog} label="Kelola" active={view === 'kelola'} onClick={() => setView('kelola')} />}
+          {isKoordinator && <BottomNavItem icon={BookOpen} label="Contoh" active={view === 'contoh'} onClick={() => setView('contoh')} />}
         </nav>
       )}
 
@@ -2175,6 +2426,21 @@ export default function AkreditasiApp() {
       >
         <p className="text-base text-slate-700">Seluruh skor, catatan, dan bukti dukung untuk <span className="font-bold text-[#1C2530]">{selectedSchool?.name}</span> akan dihapus dan tidak dapat dikembalikan. Lanjutkan?</p>
         {resetError && <p className="text-sm text-rose-500 mt-2 flex items-center gap-1"><AlertCircle size={12} /> {resetError}</p>}
+      </Modal>
+
+      {/* Modal: Konfirmasi Hapus Contoh Dokumen */}
+      <Modal
+        open={!!deleteContohTarget} onClose={() => { setDeleteContohTarget(null); setDeleteContohError(''); }}
+        title="Hapus Contoh Dokumen?"
+        footer={<>
+          <button onClick={() => { setDeleteContohTarget(null); setDeleteContohError(''); }} className="px-3.5 py-2 rounded-lg text-base font-semibold text-slate-700 hover:bg-slate-100">Batal</button>
+          <button onClick={handleDeleteContohConfirm} disabled={deleteContohChecking} className="px-3.5 py-2 rounded-lg text-base font-bold text-white bg-rose-500 hover:bg-rose-600 disabled:opacity-50">
+            {deleteContohChecking ? 'Menghapus...' : 'Ya, Hapus'}
+          </button>
+        </>}
+      >
+        <p className="text-base text-slate-700">Tautan <span className="font-bold text-[#1C2530]">{deleteContohTarget?.judul}</span> akan dihapus dari daftar contoh. Berkas di Google Drive tidak ikut terhapus.</p>
+        {deleteContohError && <p className="text-sm text-rose-500 mt-2 flex items-center gap-1"><AlertCircle size={12} /> {deleteContohError}</p>}
       </Modal>
 
       {/* Modal: Konfirmasi Hapus Pengawas */}
@@ -2259,6 +2525,7 @@ export default function AkreditasiApp() {
         </div>
       </Modal>
     </div>
+    </ContohContext.Provider>
   );
 }
 
